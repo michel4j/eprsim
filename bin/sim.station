@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+import argparse
+import importlib
+import numpy
+
+import eprsim.models
+
+models = eprsim.models.get_models()
+
+parser = argparse.ArgumentParser(description='Run Simulation Station')
+parser.add_argument('-s',  help='Source Address', type=str)
+parser.add_argument('-m',  help='Model Name', type=str, choices=models)
+parser.add_argument('-a',  help='Station Arm', type=str, choices=['alice', 'bob'])
+
+settings = numpy.linspace(0, 2*numpy.pi, 33)
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    model = importlib.import_module(f'eprsim.models.{args.m}')
+    source = model.Station(args.s, args.a)
+    try:
+        source.run(settings)
+    except KeyboardInterrupt:
+        source.stop()

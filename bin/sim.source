@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+import argparse
+import importlib
+
+import eprsim.models
+
+models = eprsim.models.get_models()
+
+parser = argparse.ArgumentParser(description='Run Simulation Source')
+parser.add_argument('-m',  help='Model Name', choices=models, type=str)
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    model = importlib.import_module(f'eprsim.models.{args.m}')
+    source = model.Source()
+    try:
+        source.run()
+    except KeyboardInterrupt:
+        source.stop()
+
