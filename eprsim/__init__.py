@@ -9,7 +9,7 @@ import zmq
 import msgpack
 import numpy
 import h5py
-import hdf5plugin
+from tqdm import tqdm
 
 import datetime
 
@@ -66,6 +66,7 @@ class StationType(ABC):
         self.running = False
         self.filename = f"{self.arm}-{datetime.datetime.now().strftime('%Y%m%dT%H%M%S')}.h5"
         self.sync_time = datetime.datetime.combine(datetime.datetime.today(), datetime.time.min).timestamp()
+        self.delay = 0
 
     @abstractmethod
     def detect(self, setting, particle):
@@ -91,19 +92,19 @@ class StationType(ABC):
 
     def run(self, settings, seed=None):
         self.running = True
-
-        start_time = time.time()
         count = 0
 
         with h5py.File(self.filename, "a") as fobj:
-            chunk_size = 1**6
+            chunk_size = 10000
             container_size = 0
-            dset = fobj.create_dataset('data', (chunk_size, 3), maxshape=(None, 3), dtype='<f8', chunks=True, **hdf5plugin.Zstd())
+            dset = fobj.create_dataset('data', (chunk_size, 3), maxshape=(None, 3), dtype='<f8', chunks=True, compression='lzf')
             buffer = numpy.zeros((chunk_size, 3))
 
             print(f"Detecting particles for {self.arm}'s arm")
+            pbar = tqdm(total=float("inf"))
             while self.running:
                 # read particle from source
+                start_time = time.time()
                 src_data = self.socket.recv_multipart()
                 particle = msgpack.loads(src_data[1])
 
@@ -111,23 +112,26 @@ class StationType(ABC):
                 setting = random.choice(settings)
 
                 # detect particle
+                self.delay = time.time() - start_time
                 incr, results = self.detect(setting, particle)
 
                 # Record data in chunks to HDF5 file
                 i = count % chunk_size
                 buffer[i] = results
-                if i == (chunk_size - 1) and incr > 0:
-                    dset.resize((count,3))
+                if count - container_size == chunk_size and incr > 0:
+                    dset.resize((count, 3))
                     dset[container_size:] = buffer[:]
                     container_size = count
                 count += int(incr)
+
+                if count % 100 == 0:
+                    pbar.update(100)
 
             # Add remaining data
             if count > container_size:
                 dset.resize(count, axis=0)
                 dset[container_size:count] = buffer[:count-container_size]
 
-        elapsed = time.time() - start_time
-        print(f"Done: {count} particles detected in {elapsed:5.1f} sec!")
+        print(f"Done: {count} particles detected!")
 
 

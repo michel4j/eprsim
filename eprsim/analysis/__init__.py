@@ -1,5 +1,4 @@
 import h5py
-import hdf5plugin
 import numpy
 
 
@@ -9,9 +8,9 @@ class Analysis(object):
             self.alice_raw = f['data'][:]
         with h5py.File(bob_file, 'r') as f:
             self.bob_raw = f['data'][:]
-        ai, bi = self.match(self.alice_raw[:,0], self.bob_raw[:,0])
-        self.alice = self.alice_raw[ai]
-        self.bob = self.bob_raw[bi]
+        #ai, bi = self.match(self.alice_raw[:,0], self.bob_raw[:,0])
+        #self.alice = self.alice_raw[ai]
+        #self.bob = self.bob_raw[bi]
 
     def match(self, a_times, b_times):
         # find Alice's time-tags that occur just before Bob's time-tags
