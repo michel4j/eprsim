@@ -1,5 +1,4 @@
 import numpy
-from datetime import datetime
 from eprsim import SourceType, StationType
 
 numpy.seterr(divide='ignore')
@@ -22,4 +21,5 @@ class Station(StationType):
         n = 2*s
         c = numpy.sign(numpy.abs(numpy.cos(n*(setting-e))) - p)
         o = numpy.sign((-1**n) * numpy.cos(n*(setting-e)))
-        return max(0, c), (self.time(), setting, o)
+        if c > 0:
+            return  self.time(), setting, o

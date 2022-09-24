@@ -3,17 +3,18 @@ import numpy
 
 
 class Analysis(object):
-    def __init__(self, alice_file, bob_file):
-        with h5py.File(alice_file, 'r') as f:
+    def __init__(self, alice, bob):
+        with h5py.File(alice, 'r') as f:
             self.alice_raw = f['data'][:]
-        with h5py.File(bob_file, 'r') as f:
+        with h5py.File(bob, 'r') as f:
             self.bob_raw = f['data'][:]
-        #ai, bi = self.match(self.alice_raw[:,0], self.bob_raw[:,0])
-        #self.alice = self.alice_raw[ai]
-        #self.bob = self.bob_raw[bi]
+        ai, bi = self.match_index()
+        self.alice = self.alice_raw[ai]
+        self.bob = self.bob_raw[bi]
 
-    def match(self, a_times, b_times):
+    def match_index(self):
         # find Alice's time-tags that occur just before Bob's time-tags
+        a_times, b_times = self.alice_raw[:,0], self.bob_raw[:,0]
         a2b_i = numpy.searchsorted(b_times, a_times)
 
         # Remove duplicates and get candidate matching indices on both sides

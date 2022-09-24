@@ -13,11 +13,11 @@ from tqdm import tqdm
 
 import datetime
 
-
 class SourceType(ABC):
     """
     Generate and emit two particles with hidden variables
     """
+    EMISSION_TIME = 1e-4
 
     def __init__(self, port=10001):
         self.context = zmq.Context()
@@ -48,7 +48,7 @@ class SourceType(ABC):
             alice, bob = self.emit()
             self.socket.send_multipart([b'alice', msgpack.dumps(alice)])
             self.socket.send_multipart([b'bob', msgpack.dumps(bob)])
-            time.sleep(1e-3)
+            time.sleep(self.EMISSION_TIME)
         print("Particle Source Stopped!")
 
 
@@ -56,6 +56,7 @@ class StationType(ABC):
     """
     Detect a particle with a given/random setting
     """
+    DETECTION_TIME = 1e-3
 
     def __init__(self, source: str, arm: str):
         self.arm = arm
@@ -64,9 +65,7 @@ class StationType(ABC):
         self.socket.connect(f"tcp://{source}:10001")
         self.socket.setsockopt(zmq.SUBSCRIBE, arm.encode('utf-8'))
         self.running = False
-        self.filename = f"{self.arm}-{datetime.datetime.now().strftime('%Y%m%dT%H%M%S')}.h5"
-        self.sync_time = datetime.datetime.combine(datetime.datetime.today(), datetime.time.min).timestamp()
-        self.delay = 0
+        self.filename = f"{self.arm}-{datetime.datetime.now().strftime('%y%m%dT%H%M')}.h5"
 
     @abstractmethod
     def detect(self, setting, particle):
@@ -82,7 +81,7 @@ class StationType(ABC):
         """"
         Synchronized clock
         """
-        return datetime.datetime.now().timestamp() - self.sync_time
+        return datetime.datetime.now().timestamp()
 
     def stop(self):
         """
@@ -97,40 +96,39 @@ class StationType(ABC):
         with h5py.File(self.filename, "a") as fobj:
             chunk_size = 10000
             container_size = 0
-            dset = fobj.create_dataset('data', (chunk_size, 3), maxshape=(None, 3), dtype='<f8', chunks=True, compression='lzf')
             buffer = numpy.zeros((chunk_size, 3))
+            dset = fobj.create_dataset('data', (chunk_size, 3), maxshape=(None, 3), dtype='<f8', chunks=True, compression='lzf')
 
             print(f"Detecting particles for {self.arm}'s arm")
-            pbar = tqdm(total=float("inf"))
+            progress = tqdm(total=float("inf"))
+
             while self.running:
-                # read particle from source
-                start_time = time.time()
-                src_data = self.socket.recv_multipart()
-                particle = msgpack.loads(src_data[1])
+                i = 0
+                while i < chunk_size:
+                    # read particle from source
+                    src_data = self.socket.recv_multipart()
+                    particle = msgpack.loads(src_data[1])
+                    setting = random.choice(settings)
 
-                # select setting randomly
-                setting = random.choice(settings)
+                    results = self.detect(setting, particle)   # detect particle
+                    time.sleep(self.DETECTION_TIME)
 
-                # detect particle
-                self.delay = time.time() - start_time
-                incr, results = self.detect(setting, particle)
+                    if results:
+                        # Record data in chunks to HDF5 file
+                        buffer[i]= results
+                        count += 1
+                        i += 1
+                        progress.update(1)
 
-                # Record data in chunks to HDF5 file
-                i = count % chunk_size
-                buffer[i] = results
-                if count - container_size == chunk_size and incr > 0:
-                    dset.resize((count, 3))
+                    if not self.running:
+                        dset.resize(count, axis=0)
+                        dset[container_size:count] = buffer[:count - container_size]
+                        break
+
+                else:
+                    dset.resize(count, axis=0)
                     dset[container_size:] = buffer[:]
                     container_size = count
-                count += int(incr)
-
-                if count % 100 == 0:
-                    pbar.update(100)
-
-            # Add remaining data
-            if count > container_size:
-                dset.resize(count, axis=0)
-                dset[container_size:count] = buffer[:count-container_size]
 
         print(f"Done: {count} particles detected!")
 

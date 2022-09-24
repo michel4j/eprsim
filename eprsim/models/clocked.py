@@ -23,6 +23,6 @@ class Station(StationType):
 
         svec = utils.rand_plane_vec(theta=setting)
         c = ((-1) ** n) * numpy.dot(h, svec).sum()
-        s = numpy.linalg.norm(numpy.cross(h, svec))
-        dt = 0 #max(0.0, 0.25 * s)
-        return 1, (self.time() + dt, setting, numpy.sign(c))
+        s = numpy.linalg.norm(numpy.cross(h, svec))/2
+        dt = s * self.DETECTION_TIME
+        return self.time() - dt, setting, numpy.sign(c)
