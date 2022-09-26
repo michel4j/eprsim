@@ -1,6 +1,27 @@
-
+import scipy
+from scipy import interpolate
 import numpy
 
+# Random number generator
+rng = numpy.random.default_rng()
+
+
+def inverse_transform_sampling(data, n_bins=40, n_samples=1000):
+    hist, bin_edges = numpy.histogram(data, bins=n_bins, density=True)
+    cum_values = numpy.zeros(bin_edges.shape)
+    cum_values[1:] = numpy.cumsum(hist * numpy.diff(bin_edges))
+    inv_cdf = interpolate.interp1d(cum_values, bin_edges)
+    r = rng.rand(n_samples)
+    return inv_cdf(r)
+
+
+def sample_pdf(func, low=0, high=1, size=None):
+    edges = numpy.linspace(low, high, 1000000)
+    x = edges[:-1] + numpy.diff(edges) / 2
+    y = (func(x) * 1e6).astype(int)
+
+    dist = scipy.stats.rv_histogram((y * 1e6))
+    return dist.rvs(size=size)
 
 
 def rand_unit_vec(size=None, theta=None):

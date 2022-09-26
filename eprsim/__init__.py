@@ -23,6 +23,9 @@ DATA_DTYPE = [
 ]
 BUFFER_SIZE = 100
 
+# random number generator
+rng = numpy.random.default_rng()
+
 
 class SourceType(ABC):
     """
@@ -47,7 +50,7 @@ class SourceType(ABC):
         """
         Return the current emission time. Represents a global clock.
         """
-        return float(self.clock + numpy.random.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
+        return float(self.clock + rng.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
 
     @abstractmethod
     def emit(self):
@@ -123,7 +126,7 @@ class StationType(ABC):
         """
         Return time at local synchronized clock. Include poisson jitter.
         """
-        t = float(self.clock + numpy.random.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
+        t = float(self.clock + rng.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
         return t
 
     def stop(self, *args):
