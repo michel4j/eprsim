@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import importlib
+import signal
+import sys
 
 import eprsim.models
 
@@ -14,8 +16,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     model = importlib.import_module(f'eprsim.models.{args.m}')
     source = model.Source()
-    try:
+    signal.signal(signal.SIGINT, source.stop)
+    signal.signal(signal.SIGTERM, source.stop)
+    sys.exit(
         source.run()
-    except KeyboardInterrupt:
-        source.stop()
+    )
 

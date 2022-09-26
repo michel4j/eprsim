@@ -1,0 +1,6 @@
+wheel
+pandas
+scipy
+tables
+tqdm
+numpy

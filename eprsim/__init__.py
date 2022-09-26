@@ -2,28 +2,52 @@
 #    EPR Simulation Framework
 #    Copyright (C) 2022  Michel Fodje
 #
-from abc import ABC, abstractmethod
+import datetime
+import os
 import random
+import sys
 import time
-import zmq
+from abc import ABC, abstractmethod
+
 import msgpack
 import numpy
-import h5py
+import pandas
+import zmq
 from tqdm import tqdm
 
-import datetime
+DATA_DTYPE = [
+    ('time', 'f8'),
+    ('setting', 'f2'),
+    ('outcome', 'f2'),
+    ('index', 'i4')
+]
+BUFFER_SIZE = 100
+
 
 class SourceType(ABC):
     """
     Generate and emit two particles with hidden variables
     """
-    EMISSION_TIME = 1e-4
+    RATE = 1e4  # maximum number of particles emitted per second
+    JITTER = 1e-6  # Jitter unit in seconds
 
-    def __init__(self, port=10001):
+    def __init__(self):
         self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.PUB)
-        self.socket.bind("tcp://*:%s" % port)
+        self.alice = self.context.socket(zmq.PUB)
+        self.bob = self.context.socket(zmq.PUB)
+        for i, socket in enumerate((self.alice, self.bob)):
+            socket.setsockopt(zmq.SNDHWM, BUFFER_SIZE)
+            socket.bind(f"tcp://*:1000{i + 1}")
+
         self.running = False
+        self.index = 0
+        self.clock = 0
+
+    def time(self):
+        """
+        Return the current emission time. Represents a global clock.
+        """
+        return float(self.clock + numpy.random.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
 
     @abstractmethod
     def emit(self):
@@ -32,7 +56,7 @@ class SourceType(ABC):
         """
         return (1,), (-1,)
 
-    def stop(self):
+    def stop(self, *args):
         """
         Stop the source
         """
@@ -46,9 +70,17 @@ class SourceType(ABC):
         print("Generating particle particle pairs ...")
         while self.running:
             alice, bob = self.emit()
-            self.socket.send_multipart([b'alice', msgpack.dumps(alice)])
-            self.socket.send_multipart([b'bob', msgpack.dumps(bob)])
-            time.sleep(self.EMISSION_TIME)
+            a_msg = [msgpack.dumps(self.time()), msgpack.dumps(alice), msgpack.dumps(self.index)]
+            b_msg = [msgpack.dumps(self.time()), msgpack.dumps(bob), msgpack.dumps(self.index)]
+            # set buffer size after first message
+            if self.index == 0:
+                size = sys.getsizeof(a_msg) * BUFFER_SIZE
+                self.alice.setsockopt(zmq.SNDBUF, size)
+                self.bob.setsockopt(zmq.SNDBUF, size)
+            self.alice.send_multipart(a_msg)
+            self.bob.send_multipart(b_msg)
+            self.index += 1
+            time.sleep(1 / self.RATE)
         print("Particle Source Stopped!")
 
 
@@ -56,16 +88,26 @@ class StationType(ABC):
     """
     Detect a particle with a given/random setting
     """
-    DETECTION_TIME = 1e-3
+    RATE = 1e4  # maximum number of particles emitted per second
+    JITTER = 1e-6  # Jitter unit in seconds
+    PULSE = 1e-9
 
     def __init__(self, source: str, arm: str):
         self.arm = arm
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.SUB)
-        self.socket.connect(f"tcp://{source}:10001")
-        self.socket.setsockopt(zmq.SUBSCRIBE, arm.encode('utf-8'))
+        port = {'alice': 10001, 'bob': 10002}.get(arm)
+        self.socket.connect(f"tcp://{source}:{port}")
+        self.socket.setsockopt(zmq.SUBSCRIBE, b'')
+        self.socket.setsockopt(zmq.RCVHWM, BUFFER_SIZE)
+        self.poller = zmq.Poller()
+        self.poller.register(self.socket, zmq.POLLIN)
         self.running = False
-        self.filename = f"{self.arm}-{datetime.datetime.now().strftime('%y%m%dT%H%M')}.h5"
+        self.filename = f"{self.arm[0].upper()}-{datetime.datetime.now().strftime('%y%m%dT%H')}.h5"
+        self.clock = 0
+        self.index = 0
+        if os.path.exists(self.filename):
+            os.remove(self.filename)
 
     @abstractmethod
     def detect(self, setting, particle):
@@ -75,15 +117,16 @@ class StationType(ABC):
         :param particle: particle to detect
         :return: incr, (timestamp, setting, outcome) tuple, incr is the number of detections
         """
-        return 1, (self.time(), setting, 1)
+        return (self.time(), setting, 1)
 
     def time(self):
-        """"
-        Synchronized clock
         """
-        return datetime.datetime.now().timestamp()
+        Return time at local synchronized clock. Include poisson jitter.
+        """
+        t = float(self.clock + numpy.random.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
+        return t
 
-    def stop(self):
+    def stop(self, *args):
         """
         Stop detecting particles and close all files
         """
@@ -91,45 +134,48 @@ class StationType(ABC):
 
     def run(self, settings, seed=None):
         self.running = True
-        count = 0
-
-        with h5py.File(self.filename, "a") as fobj:
-            chunk_size = 10000
-            container_size = 0
-            buffer = numpy.zeros((chunk_size, 3))
-            dset = fobj.create_dataset('data', (chunk_size, 3), maxshape=(None, 3), dtype='<f8', chunks=True, compression='lzf')
+        with pandas.HDFStore(self.filename, complevel=9, complib='blosc:zstd') as store:
+            count = 0
+            chunk_size = 500
+            buffer = numpy.zeros((chunk_size,), dtype=DATA_DTYPE)
 
             print(f"Detecting particles for {self.arm}'s arm")
             progress = tqdm(total=float("inf"))
-
             while self.running:
-                i = 0
-                while i < chunk_size:
+                for i in range(chunk_size):
+
                     # read particle from source
-                    src_data = self.socket.recv_multipart()
-                    particle = msgpack.loads(src_data[1])
-                    setting = random.choice(settings)
-
-                    results = self.detect(setting, particle)   # detect particle
-                    time.sleep(self.DETECTION_TIME)
-
-                    if results:
-                        # Record data in chunks to HDF5 file
-                        buffer[i]= results
-                        count += 1
-                        i += 1
-                        progress.update(1)
+                    socks = dict(self.poller.poll(1))
+                    while self.running and self.socket not in socks:
+                        socks = dict(self.poller.poll(1))
 
                     if not self.running:
-                        dset.resize(count, axis=0)
-                        dset[container_size:count] = buffer[:count - container_size]
+                        df = pandas.DataFrame.from_records(buffer[:i])
+                        store.append('data', df, format='table', index=False)
                         break
 
+                    elif self.socket in socks:
+                        src_data = self.socket.recv_multipart()
+                        clock_data, particle_data, index_data = src_data
+                        particle = msgpack.loads(particle_data)
+                        self.index = msgpack.loads(index_data)
+                        self.clock = msgpack.loads(clock_data)
+
+                        # set packet size after first message
+                        if count == 0:
+                            size = sys.getsizeof(src_data)*BUFFER_SIZE
+                            self.socket.setsockopt(zmq.RCVBUF, size)
+
+                        setting = random.choice(settings)
+                        results = self.detect(setting, particle)  # detect particle
+                        time.sleep(1 / self.RATE)
+
+                        # Record data in chunks to HDF5 file
+                        buffer[i] = results + (self.index,)
+                        count += 1
+                        progress.update(1)
+
                 else:
-                    dset.resize(count, axis=0)
-                    dset[container_size:] = buffer[:]
-                    container_size = count
-
+                    df = pandas.DataFrame.from_records(buffer)
+                    store.append('data', df, format='table', index=False)
         print(f"Done: {count} particles detected!")
-
-
