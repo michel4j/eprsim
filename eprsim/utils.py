@@ -1,6 +1,9 @@
+import glob
+import os
+
+import numpy
 import scipy
 from scipy import interpolate
-import numpy
 
 # Random number generator
 rng = numpy.random.default_rng()
@@ -28,26 +31,39 @@ def rand_unit_vec(size=None, theta=None):
     """
     Generate a random unit vector uniformly distributed on a sphere
     """
-    theta = numpy.random.uniform(0, numpy.pi*2, size=size) if theta is None else numpy.radians(theta)
+    theta = numpy.random.uniform(0, numpy.pi * 2, size=size) if theta is None else numpy.radians(theta)
     u = numpy.random.uniform(-1, 1, size=size)
-    v = numpy.sqrt(1-u**2)
+    v = numpy.sqrt(1 - u ** 2)
     if size:
-        return numpy.array([v*numpy.cos(theta), v*numpy.sin(theta), u]).T
+        return numpy.array([v * numpy.cos(theta), v * numpy.sin(theta), u]).T
     else:
-        return numpy.array([v*numpy.cos(theta), v*numpy.sin(theta), u])
+        return numpy.array([v * numpy.cos(theta), v * numpy.sin(theta), u])
 
 
 def rand_plane_vec(size=None, theta=None):
     """
     Generate a random unit vector uniformly distributed on a circle
     """
-    theta = numpy.random.uniform(0, numpy.pi*2, size=size) if theta is None else numpy.radians(theta)
+    theta = numpy.random.uniform(0, numpy.pi * 2, size=size) if theta is None else numpy.radians(theta)
     u = 0
-    v = numpy.sqrt(1-u**2)
+    v = numpy.sqrt(1 - u ** 2)
     if size:
-        return numpy.array([v*numpy.cos(theta), v*numpy.sin(theta), numpy.array([u]*size)]).T
+        return numpy.array([v * numpy.cos(theta), v * numpy.sin(theta), numpy.array([u] * size)]).T
     else:
-        return numpy.array([v*numpy.cos(theta), v*numpy.sin(theta), u])
+        return numpy.array([v * numpy.cos(theta), v * numpy.sin(theta), u])
+
+
+def get_latest(*patterns):
+    """
+    Get the latest file name in current working directory matching each of the glob patterns provided
+    :param patterns: file glob pattern
+    :return: one file for each pattern or None if no file is found
+    """
+
+    file_groups = [glob.glob(pattern) for pattern in patterns]
+    for group in file_groups:
+        group.sort(key=lambda x: -os.path.getmtime(x))
+    return [None if not group else group[0] for group in file_groups]
 
 
 def match(a, b):

@@ -31,8 +31,8 @@ class SourceType(ABC):
     """
     Generate and emit two particles with hidden variables
     """
-    RATE = 1e4      # maximum number of particles emitted per second
-    JITTER = 1e-6   # Jitter unit in seconds
+    RATE = 1e4  # maximum number of particles emitted per second
+    JITTER = 1e-6  # Jitter unit in seconds
 
     def __init__(self):
         self.context = zmq.Context()
@@ -70,7 +70,6 @@ class SourceType(ABC):
         Main loop for emitting particles through the network to listening stations
         """
         self.running = True
-        print("Generating particle particle pairs ...")
         while self.running:
             alice, bob = self.emit()
             a_msg = [msgpack.dumps(self.time()), msgpack.dumps(alice), msgpack.dumps(self.index)]
@@ -91,12 +90,18 @@ class StationType(ABC):
     """
     Detect a particle with a given/random setting
     """
-    RATE = 1e4  # maximum number of particles emitted per second
-    JITTER = 1e-6  # Jitter unit in seconds
-    TIME_PREC = 9   # precision of time measurement in number of decimal places,
-                    # negative for significant digits. used to implement event ready windows
 
-    def __init__(self, source: str, arm: str):
+    # maximum frequency of particle emission
+    RATE = 1e4
+
+    # Jitter unit in seconds
+    JITTER = 1e-6
+
+    # precision of time measurement in number of decimal places,
+    # negative for significant digits. used to implement event ready windows
+    TIME_PRECISION = 9
+
+    def __init__(self, source: str, arm: str, label: str = ''):
         self.arm = arm
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.SUB)
@@ -107,7 +112,9 @@ class StationType(ABC):
         self.poller = zmq.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self.running = False
-        self.filename = f"{self.arm[0].upper()}-{datetime.datetime.now().strftime('%y%m%dT%H')}.h5"
+
+        suffix = f'-{label}' if label else ''
+        self.filename = f"{self.arm[0].upper()}-{datetime.datetime.now().strftime('%y%m%dT%H')}{suffix}.h5"
         self.clock = 0
         self.index = 0
         if os.path.exists(self.filename):
@@ -119,16 +126,16 @@ class StationType(ABC):
         Calculate and return the station outcome. Models should implement this method
         :param setting: detector setting
         :param particle: particle to detect
-        :return: incr, (timestamp, setting, outcome) tuple, incr is the number of detections
+        :return: timestamp, setting, outcome tuple, incr is the number of detections
         """
-        return (self.time(), setting, 1)
+        return self.time(), setting, 1
 
     def time(self):
         """
-        Return time at local synchronized clock. Include poisson jitter.
+        Return time at local synchronized clock. Include poisson jitter and round time to required precision.
         """
         t = float(self.clock + rng.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
-        return numpy.round(t, decimals=self.TIME_PREC)
+        return numpy.round(t, decimals=self.TIME_PRECISION)
 
     def stop(self, *args):
         """
@@ -137,13 +144,18 @@ class StationType(ABC):
         self.running = False
 
     def run(self, settings, seed=None):
+        """
+
+        :param settings:
+        :param seed:
+        :return:
+        """
         self.running = True
         with pandas.HDFStore(self.filename, complevel=9, complib='blosc:zstd') as store:
             count = 0
             chunk_size = 500
             buffer = numpy.zeros((chunk_size,), dtype=DATA_DTYPE)
 
-            print(f"Detecting particles for {self.arm}'s arm")
             progress = tqdm(total=float("inf"))
             while self.running:
                 for i in range(chunk_size):
@@ -167,7 +179,7 @@ class StationType(ABC):
 
                         # set packet size after first message
                         if count == 0:
-                            size = sys.getsizeof(src_data)*BUFFER_SIZE
+                            size = sys.getsizeof(src_data) * BUFFER_SIZE
                             self.socket.setsockopt(zmq.RCVBUF, size)
 
                         setting = random.choice(settings)

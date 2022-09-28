@@ -23,7 +23,8 @@ if __name__ == "__main__":
     else:
         settings = numpy.linspace(0, 360, 33)
     model = importlib.import_module(f'eprsim.models.{args.m}')
-    station = model.Station(args.s, args.a)
+    print(f'[{args.m.upper()}] Detecting particles for station: {args.a.title()}...')
+    station = model.Station(source=args.s, arm=args.a, label=args.m)
     signal.signal(signal.SIGINT, station.stop)
     signal.signal(signal.SIGTERM, station.stop)
     sys.exit(

@@ -18,6 +18,7 @@ if __name__ == "__main__":
     source = model.Source()
     signal.signal(signal.SIGINT, source.stop)
     signal.signal(signal.SIGTERM, source.stop)
+    print(f"[{args.m.upper()}] Generating particle particle pairs ...")
     sys.exit(
         source.run()
     )

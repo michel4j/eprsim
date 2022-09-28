@@ -14,10 +14,8 @@ from eprsim import utils
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
-
 # random number generator
 rng = numpy.random.default_rng()
-
 
 MAX_MI_SIZE = 1_000
 MI_SAMPLES = 10_000
@@ -35,7 +33,7 @@ def mutinf(xa, ya):
             sel_y = (ya == y)
             pxy = (sel_x & sel_y).mean()
             if pxy != 0.0:
-                ixy += pxy * numpy.log10(pxy/(px*sel_y.mean()))
+                ixy += pxy * numpy.log10(pxy / (px * sel_y.mean()))
     return ixy
 
 
@@ -50,7 +48,7 @@ def rand_mi_size(X, Y, size, i):
     uX, cX = numpy.unique(X, return_counts=True)
     uY, cY = numpy.unique(Y, return_counts=True)
     total = cY.sum()
-    xprobs, yprobs =cX/total, cY/total
+    xprobs, yprobs = cX / total, cY / total
     return mutinf(
         rng.choice(uX, p=xprobs, size=size),
         rng.choice(uY, p=yprobs, size=size)
@@ -72,16 +70,16 @@ def fmt_ang(angle):
     """
     return {
         22.5: "π/8",
-        30.0:  "π/6",
-        45.0:  "π/4",
-        60.0:  "π/3",
+        30.0: "π/6",
+        45.0: "π/4",
+        60.0: "π/3",
         67.5: "3π/8",
-        90.0:  "π/2",
+        90.0: "π/2",
         135.0: "3π/4",
         180.0: "π",
         270.0: "3π/2",
         360.0: "0 ",
-    }.get(round(angle,1), f"{angle:g}")
+    }.get(round(angle, 1), f"{angle:g}")
 
 
 def mi_signif(x, y, label="i,j"):
@@ -94,14 +92,15 @@ def mi_signif(x, y, label="i,j"):
         total = x_counts.sum()
         x_probs, y_probs = x_counts / total, y_counts / total
 
-        work = pool.imap_unordered(functools.partial(rand_mi_pdf, x_vals, y_vals, x_probs, y_probs, MAX_MI_SIZE), range(MI_SAMPLES))
-        for i, out in tqdm(enumerate(work), total=MI_SAMPLES):
+        work = pool.imap_unordered(functools.partial(rand_mi_pdf, x_vals, y_vals, x_probs, y_probs, MAX_MI_SIZE),
+                                   range(MI_SAMPLES))
+        for i, out in tqdm(enumerate(work), total=MI_SAMPLES, leave=False, ncols=80):
             rand_mis[i] = out
-
         rank = scipy.stats.percentileofscore(rand_mis, mi)
         pct_95 = numpy.percentile(rand_mis, 95)
         avg_mi = numpy.mean(rand_mis)
         sigma_mi = numpy.std(rand_mis)
+        print('\r', end="")
 
     return [
         f"I({label})",
@@ -114,30 +113,23 @@ def mi_signif(x, y, label="i,j"):
 
 
 def analyse(alice, bob, spin=0.5):
-    """EPRB Perform analysis"""
-
-    # Find all settings used in simulation
-    #a1, a2 = sorted(numpy.unique(alice["setting"]))[:2]
-    #b1, b2 = sorted(numpy.unique(bob["setting"]))[:2]
-
+    """
+    EPRB Perform analysis
+    """
     settings = 0.0, 22.5, 45, 67.5
     run_analysis(alice, bob, alice, bob, settings=settings, spin=spin)
 
 
 def analyse_cfd(alice, bob, cindy, dave, spin):
-    """EPRB Perform analysis with counterfactuals"""
+    """
+    EPRB Perform analysis with counterfactuals
+    """
 
-    # Find all settings used in simulation
-    # a1 = sorted(numpy.unique(alice[:,1]))[0]
-    # a2 = sorted(numpy.unique(cindy[:,1]))[0]
-    # b1 = sorted(numpy.unique(bob[:,1]))[0]
-    # b2 = sorted(numpy.unique(dave[:,1]))[0]
     settings = 0.0, 22.5, 45, 67.5
     run_analysis(alice, bob, cindy, dave, settings=settings, spin=spin)
 
 
 def run_analysis(*results, settings=None, spin=0.5, digits=3):
-
     """
     Core of analysis
     :param results: Data for experiment stations (A, B, C, D)
@@ -151,21 +143,19 @@ def run_analysis(*results, settings=None, spin=0.5, digits=3):
     data = [
         (results[0], 'A', settings[0], 'a₁'),
         (results[1], 'B', settings[1], 'b₁'),
-        (results[2 % len(results)], 'C', settings[2], 'a₂'),    # re-use alice and bob results if only two datasets
-        (results[3 % len(results)], 'D', settings[3], 'b₂'),    # are provided. for CFD provide 4.
+        (results[2 % len(results)], 'C', settings[2], 'a₂'),  # re-use alice and bob results if only two datasets
+        (results[3 % len(results)], 'D', settings[3], 'b₂'),  # are provided. for CFD provide 4.
     ]
 
-    eab_sim = numpy.zeros(4)   # E(a,b)
-    nab_sim = numpy.zeros(4, dtype=int)   # N(a,b)
-    eab_qm = numpy.zeros(4)    # E(a,b)_qm
-    eab_err = numpy.zeros(4)   # Standard Error
+    eab_sim = numpy.zeros(4)  # E(a,b)
+    nab_sim = numpy.zeros(4, dtype=int)  # N(a,b)
+    eab_qm = numpy.zeros(4)  # E(a,b)_qm
+    eab_err = numpy.zeros(4)  # Standard Error
 
     corr_tbl = PrettyTable()
-    mi_tbl = PrettyTable()
+
     corr_tbl.align = "r"
-    mi_tbl.align = "r"
     corr_tbl.field_names = ["E(a,b)", "Nab", "<AB>sim", "<AB>qm", "Err"]
-    mi_tbl.field_names = ["", "I(x,y)", "Rank", "95% Percentile", "<I>", "σI"]
 
     for i, pair in enumerate(itertools.product((data[0], data[2]), (data[1], data[3]))):
         (a_data, a_name, a_var, a_var_name), (b_data, b_name, b_var, b_var_name) = pair
@@ -185,23 +175,15 @@ def run_analysis(*results, settings=None, spin=0.5, digits=3):
             round(eab_err[i], digits),
         ])
 
-    mi_tbl.add_rows([
-        mi_signif(results[0]['setting'], results[1]['setting'], label=f'a,b'),
-        mi_signif(results[0]['setting'], results[0]['outcome'], label=f'a,A'),
-        mi_signif(results[1]['setting'], results[1]['outcome'], label=f'b,B'),
-        mi_signif(results[0]['outcome'], results[1]['outcome'], label=f'A,B'),
-    ])
-
-    print("="*80)
+    print("=" * 80)
     print("EPRB-Simulation Analysis")
-    print("-"*80)
-    print(f"a₁ = {fmt_ang(data[0][2])}, a₂ = {fmt_ang(data[2][2])}, b₁ = {fmt_ang(data[1][2])}, b₂ = {fmt_ang(data[3][2])}")
+    print("-" * 80)
+    print(
+        f"a₁ = {fmt_ang(data[0][2])}, a₂ = {fmt_ang(data[2][2])}, b₁ = {fmt_ang(data[1][2])}, b₂ = {fmt_ang(data[3][2])}")
     print(corr_tbl)
     chsh_sim = abs(eab_sim[0] - eab_sim[1] + eab_sim[2] + eab_sim[3])
     chsh_qm = abs(eab_qm[0] - eab_qm[1] + eab_qm[2] + eab_qm[3])
     print(f"CHSH: <= 2.0, Sim: {chsh_sim:0.3f}, QM: {chsh_qm.sum():0.3f}")
-    print()
-    print(mi_tbl)
     print()
 
     # Calculate correlation curve, express angle difference in range 0 deg to pi range only.
@@ -222,33 +204,108 @@ def run_analysis(*results, settings=None, spin=0.5, digits=3):
     plt.clf()
 
 
-def qm_func(a, spin=1/2):
+def qm_func(a, spin=1 / 2):
     """
     Quantum mechanical Correlation for specific angular difference
     :param a: angle difference in radians
     :param spin: spin of particles, default 1/2
     """
-    n = 1/spin
+    n = 1 / spin
     return (-1 ** n) * numpy.cos(n * a)
 
 
 class Analysis(object):
-    def __init__(self, name=None, dt=1e-5):
-        if name is None:
-            name = datetime.now().strftime('%y%m%dT%H')
-        alice = f'A-{name}.h5'
-        bob = f'B-{name}.h5'
+    def __init__(self, dt=1e-5):
+        a_file, b_file = utils.get_latest('A-*.h5', 'B-*.h5')
+        assert all((a_file, b_file)), "Matching Data files were not found in folder."
+        print(f'Running analysis for data: Alice - {a_file}, Bob - {b_file} ...')
 
-        # remove missing outcomes and keep one outcome per pulse window for pulsed experiments.
-        self.alice_df = pandas.read_hdf(alice).dropna(subset='outcome').drop_duplicates(subset='time', keep='first')
-        self.bob_df = pandas.read_hdf(bob).dropna(subset='outcome').drop_duplicates(subset='time', keep='first')
-        self.alice_raw = self.alice_df.to_records(index=False)
-        self.bob_raw = self.bob_df.to_records(index=False)
+        # Original data, no manipulations
+        self.original = {
+            'Alice': pandas.read_hdf(a_file),
+            'Bob': pandas.read_hdf(b_file)
+        }
 
-        ai, bi = utils.match(self.alice_raw['time'], self.bob_raw['time'])
-        self.alice = self.alice_raw[ai]
-        self.bob = self.bob_raw[bi]
-        sel = numpy.abs(self.bob['time'] - self.alice['time']) < dt
-        analyse(self.alice[sel], self.bob[sel])
+        # remove nan outcome values, ie particles seen by station but not detected
+        self.detected = {
+            name: data.dropna(subset='outcome')
+            for name, data in self.original.items()
+        }
 
+        # keep only first event in a time batch, corresponds to pulsed measurements
+        # with pre-agreed time slots. does nothing if time precision is smaller than
+        # emission/detection period. Also convert to numpy record array at this point
+        self.unique = {
+            name: data.drop_duplicates(subset='time', keep='first').to_records(index=False)
+            for name, data in self.detected.items()
+        }
 
+        # match data pairs and create final matched data for further analysis
+        # coincidence time constraints have not been applied yet
+        ai, bi = utils.match(self.unique['Alice']['time'], self.unique['Bob']['time'])
+        self.data = {
+            'Alice': self.unique['Alice'][ai],
+            'Bob': self.unique['Bob'][bi]
+        }
+        self.analyse(coinc_time=dt)
+
+    def analyse(self, coinc_time=1e-15):
+        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < coinc_time
+        analyse(self.data['Alice'][sel], self.data['Bob'][sel])
+
+    def mi_test(self, coinc_time=1e-15):
+        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < coinc_time
+        alice = self.data['Alice'][sel]
+        bob = self.data['Bob'][sel]
+
+        table = PrettyTable()
+        table.align = "r"
+        table.field_names = ["", "I(x,y)", "Rank", "95% Percentile", "<I>", "σI"]
+        print("Mutual Information Analysis.")
+        table.add_rows([
+            mi_signif(alice['setting'], bob['setting'], label=f'a,b'),
+            mi_signif(alice['setting'], alice['outcome'], label=f'a,A'),
+            mi_signif(bob['setting'], bob['outcome'], label=f'b,B'),
+            mi_signif(alice['outcome'], bob['outcome'], label=f'A,B'),
+        ])
+        print(table)
+
+    def stats(self, coinc_time=1):
+
+        table = PrettyTable()
+        table.align = 'r'
+        table.field_names = ["Station", "Seen", "Detected", "% Detected", "% Matched", "% Coinc"]
+        print("Station event counts.")
+
+        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < coinc_time
+        coinc = sel.sum()
+
+        for station in ['Alice', 'Bob']:
+            seen = len(self.original[station])
+            detected = len(self.detected[station])
+            matched = len(self.data[station])
+            table.add_row([
+                f'{station} - All',
+                seen,
+                detected,
+                f'{detected / seen:0.1%}',
+                f'{matched / detected:0.1%}',
+                f'{coinc / matched:0.1%}'
+            ])
+
+        for station in ['Alice', 'Bob']:
+            for setting in numpy.unique(self.original[station]['setting']):
+                seen = (self.original[station]['setting'] == setting).sum()
+                detected = (self.detected[station]['setting'] == setting).sum()
+                matched = (self.data[station]['setting'] == setting).sum()
+                coinc = (self.data[station][sel]['setting'] == setting).sum()
+
+                table.add_row([
+                    f'{station} - {setting}',
+                    seen,
+                    detected,
+                    f'{detected / seen:0.1%}',
+                    f'{matched / detected:0.1%}',
+                    f'{coinc / matched:0.1%}'
+                ])
+        print(table)
