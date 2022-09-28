@@ -18,6 +18,13 @@ def inverse_transform_sampling(data, n_bins=40, n_samples=1000):
     return inv_cdf(r)
 
 
+def pdf_sampler(data, bins=100):
+    hist, edges = numpy.histogram(data, bins=bins, density=True)
+    cum = numpy.zeros_like(hist)
+    cum = numpy.cumsum(hist*numpy.diff(edges))
+    return scipy.stats.rv_histogram((cum, edges))
+
+
 def sample_pdf(func, low=0, high=1, size=None):
     edges = numpy.linspace(low, high, 1000000)
     x = edges[:-1] + numpy.diff(edges) / 2
@@ -25,6 +32,10 @@ def sample_pdf(func, low=0, high=1, size=None):
 
     dist = scipy.stats.rv_histogram((y * 1e6))
     return dist.rvs(size=size)
+
+
+
+
 
 
 def rand_unit_vec(size=None, theta=None):
