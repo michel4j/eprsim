@@ -31,8 +31,8 @@ class SourceType(ABC):
     """
     Generate and emit two particles with hidden variables
     """
-    RATE = 1e4  # maximum number of particles emitted per second
-    JITTER = 1e-6  # Jitter unit in seconds
+    RATE = 1e4      # maximum number of particles emitted per second
+    JITTER = 1e-6   # Jitter unit in seconds
 
     def __init__(self):
         self.context = zmq.Context()
@@ -93,7 +93,8 @@ class StationType(ABC):
     """
     RATE = 1e4  # maximum number of particles emitted per second
     JITTER = 1e-6  # Jitter unit in seconds
-    PULSE = 1e-9
+    TIME_PREC = 9   # precision of time measurement in number of decimal places,
+                    # negative for significant digits. used to implement event ready windows
 
     def __init__(self, source: str, arm: str):
         self.arm = arm
@@ -127,7 +128,7 @@ class StationType(ABC):
         Return time at local synchronized clock. Include poisson jitter.
         """
         t = float(self.clock + rng.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
-        return t
+        return numpy.round(t, decimals=self.TIME_PREC)
 
     def stop(self, *args):
         """

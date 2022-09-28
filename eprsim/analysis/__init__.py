@@ -6,48 +6,63 @@ from datetime import datetime
 import numpy
 import pandas
 import scipy.stats
-import tqdm
-
+from tqdm import tqdm
+import matplotlib
 from prettytable import PrettyTable
 from eprsim import utils
+
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
+
 
 # random number generator
 rng = numpy.random.default_rng()
 
 
-MAX_MI_SIZE = 1000
-MI_SAMPLES = 10000
+MAX_MI_SIZE = 1_000
+MI_SAMPLES = 10_000
 
 
 def mutinf(xa, ya):
-    i_xy = 0.0
+    """
+    Calculate mutual information
+    """
+    ixy = 0.0
     for x in numpy.unique(xa):
+        sel_x = (xa == x)
+        px = sel_x.mean()
         for y in numpy.unique(ya):
-            sel_x = (xa == x)
             sel_y = (ya == y)
-            p_xy = (sel_x & sel_y).mean()
-            if p_xy != 0.0:
-                i_xy += p_xy * numpy.log10(p_xy/(sel_x.mean()*sel_y.mean()))
-    return i_xy
-
-
-def rand_mi1(x, y, i):
-    """
-    Calculate mutual information for a random dataset with equivalent probability distribution
-    """
-    rng.shuffle(x)
-    rng.shuffle(y)
-
-    return mutinf(x, y)
+            pxy = (sel_x & sel_y).mean()
+            if pxy != 0.0:
+                ixy += pxy * numpy.log10(pxy/(px*sel_y.mean()))
+    return ixy
 
 
 def rand_mi(x, y, i):
-    xvals, xcounts = numpy.unique(x, return_counts=True)
-    yvals, ycounts = numpy.unique(y, return_counts=True)
+    """
+    Calculate mutual information for a random dataset with equivalent probability distribution
+    """
+    return mutinf(rng.permutation(x), rng.permutation(y))
+
+
+def rand_mi_size(X, Y, size, i):
+    uX, cX = numpy.unique(X, return_counts=True)
+    uY, cY = numpy.unique(Y, return_counts=True)
+    total = cY.sum()
+    xprobs, yprobs =cX/total, cY/total
     return mutinf(
-        rng.choice(xvals, p=xcounts/xcounts.sum(), size=MAX_MI_SIZE),
-        rng.choice(yvals, p=ycounts/ycounts.sum(), size=MAX_MI_SIZE)
+        rng.choice(uX, p=xprobs, size=size),
+        rng.choice(uY, p=yprobs, size=size)
     )
+
+
+def rand_mi_pdf(x_vals, y_vals, x_probs, y_probs, size, i):
+    return mutinf(
+        rng.choice(x_vals, p=x_probs, size=size),
+        rng.choice(y_vals, p=y_probs, size=size)
+    )
+
 
 def fmt_ang(angle):
     """
@@ -71,14 +86,23 @@ def fmt_ang(angle):
 
 def mi_signif(x, y, label="i,j"):
     mi = mutinf(x, y)
-    pool = Pool(cpu_count())
-    rand_mis = list(
-        tqdm.tqdm(pool.imap(functools.partial(rand_mi, x, y), range(MI_SAMPLES)), total=MI_SAMPLES)
-    )
-    rank = scipy.stats.percentileofscore(rand_mis, mi)
-    pct_95 = numpy.percentile(rand_mis, 95)
-    avg_mi = numpy.mean(rand_mis)
-    sigma_mi = numpy.std(rand_mis)
+    with Pool(cpu_count()) as pool:
+        rand_mis = numpy.empty((MI_SAMPLES,))
+
+        x_vals, x_counts = numpy.unique(x, return_counts=True)
+        y_vals, y_counts = numpy.unique(y, return_counts=True)
+        total = x_counts.sum()
+        x_probs, y_probs = x_counts / total, y_counts / total
+
+        work = pool.imap_unordered(functools.partial(rand_mi_pdf, x_vals, y_vals, x_probs, y_probs, MAX_MI_SIZE), range(MI_SAMPLES))
+        for i, out in tqdm(enumerate(work), total=MI_SAMPLES):
+            rand_mis[i] = out
+
+        rank = scipy.stats.percentileofscore(rand_mis, mi)
+        pct_95 = numpy.percentile(rand_mis, 95)
+        avg_mi = numpy.mean(rand_mis)
+        sigma_mi = numpy.std(rand_mis)
+
     return [
         f"I({label})",
         f"{mi:0.2e}",
@@ -93,22 +117,23 @@ def analyse(alice, bob, spin=0.5):
     """EPRB Perform analysis"""
 
     # Find all settings used in simulation
-    a1, a2 = sorted(numpy.unique(alice["setting"]))[:2]
-    b1, b2 = sorted(numpy.unique(bob["setting"]))[:2]
+    #a1, a2 = sorted(numpy.unique(alice["setting"]))[:2]
+    #b1, b2 = sorted(numpy.unique(bob["setting"]))[:2]
 
-    run_analysis(alice, bob, alice, bob, settings=(a1, b1, a2, b2), spin=spin)
+    settings = 0.0, 22.5, 45, 67.5
+    run_analysis(alice, bob, alice, bob, settings=settings, spin=spin)
 
 
 def analyse_cfd(alice, bob, cindy, dave, spin):
     """EPRB Perform analysis with counterfactuals"""
 
     # Find all settings used in simulation
-    a1 = sorted(numpy.unique(alice[:,1]))[0]
-    a2 = sorted(numpy.unique(cindy[:,1]))[0]
-    b1 = sorted(numpy.unique(bob[:,1]))[0]
-    b2 = sorted(numpy.unique(dave[:,1]))[0]
-
-    run_analysis(alice, bob, cindy, dave, settings=(a1, b1, a2, b2), spin=spin)
+    # a1 = sorted(numpy.unique(alice[:,1]))[0]
+    # a2 = sorted(numpy.unique(cindy[:,1]))[0]
+    # b1 = sorted(numpy.unique(bob[:,1]))[0]
+    # b2 = sorted(numpy.unique(dave[:,1]))[0]
+    settings = 0.0, 22.5, 45, 67.5
+    run_analysis(alice, bob, cindy, dave, settings=settings, spin=spin)
 
 
 def run_analysis(*results, settings=None, spin=0.5, digits=3):
@@ -139,12 +164,6 @@ def run_analysis(*results, settings=None, spin=0.5, digits=3):
     mi_tbl = PrettyTable()
     corr_tbl.align = "r"
     mi_tbl.align = "r"
-
-    print("="*80)
-    print("EPRB-Simulation Analysis")
-    print("-"*80)
-    print(f"a₁ = {fmt_ang(data[0][2])}, a₂ = {fmt_ang(data[2][2])}, b₁ = {fmt_ang(data[1][2])}, b₂ = {fmt_ang(data[3][2])}")
-
     corr_tbl.field_names = ["E(a,b)", "Nab", "<AB>sim", "<AB>qm", "Err"]
     mi_tbl.field_names = ["", "I(x,y)", "Rank", "95% Percentile", "<I>", "σI"]
 
@@ -165,24 +184,42 @@ def run_analysis(*results, settings=None, spin=0.5, digits=3):
             round(eab_qm[i], digits),
             round(eab_err[i], digits),
         ])
-        # if i == 0:
-        #     mi_tbl.add_rows([
-        #         mi_signif(a_data['setting'], b_data['setting'], label=f'{a_var_name},{b_var_name}'),
-        #         mi_signif(a_data['setting'], a_data['outcome'], label=f'{a_var_name},{a_name}'),
-        #         mi_signif(b_data['setting'], b_data['outcome'], label=f'{b_var_name},{b_name}'),
-        #         mi_signif(a_data['setting'], b_data['outcome'], label=f'{a_var_name},{b_name}'),
-        #         mi_signif(b_data['setting'], a_data['outcome'], label=f'{b_var_name},{a_name}'),
-        #         mi_signif(a_data['outcome'], b_data['outcome'], label=f'{a_name},{b_name}'),
-        #     ])
 
-    print()
+    mi_tbl.add_rows([
+        mi_signif(results[0]['setting'], results[1]['setting'], label=f'a,b'),
+        mi_signif(results[0]['setting'], results[0]['outcome'], label=f'a,A'),
+        mi_signif(results[1]['setting'], results[1]['outcome'], label=f'b,B'),
+        mi_signif(results[0]['outcome'], results[1]['outcome'], label=f'A,B'),
+    ])
+
+    print("="*80)
+    print("EPRB-Simulation Analysis")
+    print("-"*80)
+    print(f"a₁ = {fmt_ang(data[0][2])}, a₂ = {fmt_ang(data[2][2])}, b₁ = {fmt_ang(data[1][2])}, b₂ = {fmt_ang(data[3][2])}")
     print(corr_tbl)
     chsh_sim = abs(eab_sim[0] - eab_sim[1] + eab_sim[2] + eab_sim[3])
     chsh_qm = abs(eab_qm[0] - eab_qm[1] + eab_qm[2] + eab_qm[3])
     print(f"CHSH: <= 2.0, Sim: {chsh_sim:0.3f}, QM: {chsh_qm.sum():0.3f}")
     print()
-    # print(mi_tbl)
-    # print()
+    print(mi_tbl)
+    print()
+
+    # Calculate correlation curve, express angle difference in range 0 deg to pi range only.
+    d_ang = numpy.abs(results[0]['setting'] - results[1]['setting']) % 180.
+    corr_exp = results[0]['outcome'] * results[1]['outcome']
+    angles, n_ab = numpy.unique(d_ang, return_counts=True)
+    exp_ab = numpy.zeros_like(angles)
+    for i, a in enumerate(angles):
+        sel = (d_ang == a)
+        exp_ab[i] = corr_exp[sel].mean()
+    exp_qm = qm_func(numpy.radians(angles), spin=spin)
+
+    plt.plot(angles, exp_ab, 'm-x', label='Model: E(a,b)', lw=0.5)
+    plt.plot(angles, exp_qm, 'b-+', label='QM', lw=0.5)
+    plt.legend()
+    plt.xlim(0, 180)
+    plt.savefig('correlations.png')
+    plt.clf()
 
 
 def qm_func(a, spin=1/2):
