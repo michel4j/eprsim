@@ -81,9 +81,13 @@ def match(a, b):
     """
     Find and return indices in array a and b that produce the pairs with values closest to each other.
     entries not matched are removed
+
+    :param a: array of numbers
+    :param b: array of numbers
+    :return: tuple of indices into a and b that generate matched arrays of the same length
     """
 
-    # find unique positions in a in which to place b values and their corresponding b positions
+    # find unique positions in array "a", which to place "b" values and their corresponding b positions
     afi1 = numpy.searchsorted(a, b)
     bi1 = numpy.nonzero(numpy.diff(afi1))[0]
     ai1 = afi1[bi1]
@@ -117,103 +121,3 @@ def match(a, b):
         bi_nu = numpy.nonzero(numpy.diff(bi) <= 0)[0]
 
     return ai, bi
-
-
-def jal_match(a_times, b_times):
-    """
-    Coincidence detection algorithm adapted from Jan Ake Larsson's version
-    in BellTiming.
-
-    http://people.isy.liu.se/jalar/belltiming/
-    <jalar@mai.liu.se>
-    This function is copyrighted to Jan Ake Larsson and Licensed under the GPL
-    See the License file at the above website for details on re-use
-    """
-    np = numpy
-    # Index is the index of Alice's data, everywhere but in b_times.
-    #
-    # Find the immediately following detections at Bob's site.
-    # Only do \.../
-    # If needed I'll add /... and ...\ starts and ends later.
-    # An entry == len(b_times) here means no detection follows
-    following = np.searchsorted(b_times, a_times)
-    # Uniqify: At most one makes a pair with another
-    i = np.nonzero(following[:-1] != following[1:])[0]
-    ai_f = i
-    bi_f = following[ai_f]
-    ai_p = i + 1
-    bi_p = following[ai_p] - 1
-    # At this point, bi_f contains Bob's index of the detection
-    # following the ones that have the indices ai_f at Alice.
-    #
-    # Time difference calculation
-    diff_f = b_times[bi_f] - a_times[ai_f]
-    diff_p = a_times[ai_p] - b_times[bi_p]
-    # Link notation below: \ a detection at Bob follows a detection at
-    # Alice, / a detection at Bob precedes a detection at Alice.
-    # Detect chains: a_chain /\ b_chain \/
-    a_chain = ai_f[1:] == ai_p[:-1]
-    b_chain = bi_p == bi_f
-    a_f_smaller_p = diff_f[1:] < diff_p[:-1]
-    b_p_smaller_f = diff_p < diff_f
-    while len(np.nonzero(a_chain)[0]) or len(np.nonzero(b_chain)[0]):
-        # print ".",
-        # Chain /\/
-        # If such a chain is found and the middle time is less
-        # than the outer times, remove /-/
-        # print_moj("  ","/\/ ", a_chain[:30]*b_chain[1:31])
-        # print_moj("  ","/\/ ", a_chain[:30]*a_f_smaller_p[:30]*b_chain[1:31])
-        # print_moj("  ","/\/ ", a_chain[:30]*a_f_smaller_p[:30]*b_chain[1:31]*(1-b_p_smaller_f[1:31]))
-        i = np.nonzero(a_chain * a_f_smaller_p * b_chain[1:] * (1 - b_p_smaller_f[1:]))[0]
-        ai_p[i] = -1
-        bi_p[i] = -1
-        ai_p[i + 1] = -1
-        bi_p[i + 1] = -1
-        # Chain \/\
-        # If such a chain is found and the middle time is less
-        # than the outer times, remove \-\
-        # print_moj("","\/\ ", a_chain[:30]*b_chain[:30])
-        # print_moj("","\/\ ", a_chain[:30]*(1-a_f_smaller_p[:30])*b_chain[:30])
-        # print_moj("","\/\ ", a_chain[:30]*(1-a_f_smaller_p[:30])*b_chain[:30]*b_p_smaller_f[:30])
-        i = np.nonzero(a_chain * (1 - a_f_smaller_p) * b_chain[:-1] * b_p_smaller_f[:-1])[0]
-        ai_f[i] = -2
-        bi_f[i] = -2
-        ai_f[i + 1] = -2
-        bi_f[i + 1] = -2
-        # Chain /\-
-        # If such a chain is found and the ending time is less
-        # than the previous time, remove /--
-        # print_moj("  ","/\- ", a_chain[:30]*(1-b_chain[1:31]))
-        # print_moj("  ","/\- ", a_chain[:30]*a_f_smaller_p[:30]*(1-b_chain[1:31]))
-        i = np.nonzero(a_chain * a_f_smaller_p * (1 - b_chain[1:]))[0]
-        ai_p[i] = -1
-        bi_p[i] = -1
-        # Chain \/-
-        # If such a chain is found and the ending time is less
-        # than the previous time, remove \--
-        # print_moj("","\/- ", (1-a_chain[:30])*b_chain[:30])
-        # print_moj("","\/- ", (1-a_chain[:30])*b_chain[:30]*b_p_smaller_f[:30])
-        i = np.nonzero((1 - a_chain) * b_chain[:-1] * b_p_smaller_f[:-1])[0]
-        ai_f[i] = -2
-        bi_f[i] = -2
-        # Chain -\/
-        # If such a chain is found and the starting time is less
-        # than the following time, remove --/
-        # print_moj("  ","-\/ ", (1-a_chain[:30])*b_chain[1:31])
-        # print_moj("  ","-\/ ", (1-a_chain[:30])*b_chain[1:31]*(1-b_p_smaller_f[1:31]))
-        i = np.nonzero((1 - a_chain) * b_chain[1:] * (1 - b_p_smaller_f[1:]))[0]
-        ai_p[i + 1] = -1
-        bi_p[i + 1] = -1
-        # Chain -/\
-        # If such a chain is found and the middle time is less
-        # than the following time, remove --\
-        # print_moj("","-/\ ", a_chain[:30]*(1-b_chain[:30]))
-        # print_moj("","-/\ ", a_chain[:30]*(1-a_f_smaller_p[:30])*(1-b_chain[:30]))
-        i = np.nonzero(a_chain * (1 - a_f_smaller_p) * (1 - b_chain[:-1]))[0]
-        ai_f[i + 1] = -2
-        bi_f[i + 1] = -2
-        a_chain = ai_p[:-1] == ai_f[1:]
-        b_chain = bi_p == bi_f
-        # print "a_chain", a_chain
-        # print "b_chain", b_chain
-    return ai_f[ai_f > 0], bi_f[bi_f > 0]

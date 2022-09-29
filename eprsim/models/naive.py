@@ -1,3 +1,7 @@
+# Naive model in which the particles carray the outcomes with them.
+# Obviously does nothing interesting but can be used to verify that matching algorithms
+# are working properly.
+
 import numpy
 from eprsim import SourceType, StationType
 

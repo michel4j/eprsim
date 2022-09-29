@@ -1,3 +1,7 @@
+# Original EPR-Simple Model ported to new framework
+# Michel Fodje -- 2013
+
+
 import numpy
 from eprsim import SourceType, StationType
 

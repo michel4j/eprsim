@@ -1,3 +1,6 @@
+# Symmetric Gisin & Gisin Model
+# Phys.Lett. A260 (1999) 323-327 https://doi.org/10.48550/arXiv.quant-ph/9905018
+
 import numpy
 from eprsim import SourceType, StationType, utils
 
@@ -12,24 +15,20 @@ class Source(SourceType):
     def emit(self):
         s = 0.5
         v = utils.rand_unit_vec()
-        return (*v, s), (*-v, s)
+        p = float(rng.choice([-1, 1]))
+        return (*v, p, s), (*-v, -p, s)
 
 
 class Station(StationType):
     JITTER = 0.0
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        y = numpy.abs(numpy.cos(numpy.linspace(0, numpy.pi, 1_000_000)))
-        self.generator = utils.pdf_sampler(y)
-
     def detect(self, setting, particle):
         h = particle[:3]
-        s = particle[3]
+        p = particle[3]
+        s = particle[4]
         a = utils.rand_plane_vec(theta=setting/s)
         c = ((-1) ** (2*s)) * numpy.dot(h, a)
-
-        if self.generator.rvs() <= abs(c):
+        if p > 0 or numpy.random.uniform() <= abs(c):
             return self.time(), setting, numpy.sign(c)
         else:
             return self.time(), setting, numpy.nan

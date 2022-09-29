@@ -1,3 +1,8 @@
+# Revisited Pearle Mode by R.D Gill, inspired by EPR-Simple
+# Entropy 2020, 22(1), 1
+# https://doi.org/10.3390%2Fe22010001
+# https://doi.org/10.1103/PhysRevD.2.1418
+
 import numpy
 from eprsim import SourceType, StationType
 
@@ -14,8 +19,7 @@ class Station(StationType):
     def detect(self, setting, particle):
         e, p, s = particle
         a = numpy.radians(setting)
-        n = 2*s
-        c = (-1 ** n) * numpy.cos((a - e)/s)
+        c = (-1 ** (2*s)) * numpy.cos((a - e)/s)
         if p <= abs(c):
             return self.time(), setting, numpy.sign(c)
         else:
