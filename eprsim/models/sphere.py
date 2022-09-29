@@ -7,8 +7,6 @@ from eprsim import SourceType, StationType, utils
 
 
 class Source(SourceType):
-    JITTER = 0.0
-
     def emit(self):
         s = 0.5
         v = utils.rand_unit_vec()
@@ -17,8 +15,6 @@ class Source(SourceType):
 
 
 class Station(StationType):
-    JITTER = 0.0
-
     def detect(self, setting, particle):
         h = particle[:3]
         p = particle[3]

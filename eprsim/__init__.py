@@ -21,7 +21,7 @@ DATA_DTYPE = [
     ('outcome', 'f2'),
     ('index', 'i4')
 ]
-BUFFER_SIZE = 100
+BUFFER_SIZE = 10
 
 # random number generator
 rng = numpy.random.default_rng()
@@ -32,7 +32,7 @@ class SourceType(ABC):
     Generate and emit two particles with hidden variables
     """
     RATE = 1e4  # maximum number of particles emitted per second
-    JITTER = 1e-6  # Jitter unit in seconds
+    JITTER = 0  # Jitter unit in seconds
 
     def __init__(self):
         self.context = zmq.Context()
@@ -95,7 +95,7 @@ class StationType(ABC):
     RATE = 1e4
 
     # Jitter unit in seconds
-    JITTER = 1e-6
+    JITTER = 0
 
     # precision of time measurement in number of decimal places,
     # negative for significant digits. used to implement event ready windows

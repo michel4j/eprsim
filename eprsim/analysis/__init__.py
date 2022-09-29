@@ -1,7 +1,7 @@
 import functools
 import itertools
 from multiprocessing import Pool, cpu_count
-from datetime import datetime
+
 
 import numpy
 import pandas
@@ -11,7 +11,7 @@ import matplotlib
 from prettytable import PrettyTable
 from eprsim import utils
 
-matplotlib.use('Agg')
+matplotlib.use('Gtk3Agg')
 from matplotlib import pyplot as plt
 
 # random number generator
