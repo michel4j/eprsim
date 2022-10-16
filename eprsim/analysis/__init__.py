@@ -117,7 +117,7 @@ def analyse(alice, bob, spin=0.5):
     EPRB Perform analysis
     """
     settings = 0.0, 22.5, 45, 67.5
-    run_analysis(alice, bob, alice, bob, settings=settings, spin=spin)
+    chsh_analysis(alice, bob, alice, bob, settings=settings, spin=spin)
 
 
 def analyse_cfd(alice, bob, cindy, dave, spin):
@@ -126,10 +126,10 @@ def analyse_cfd(alice, bob, cindy, dave, spin):
     """
 
     settings = 0.0, 22.5, 45, 67.5
-    run_analysis(alice, bob, cindy, dave, settings=settings, spin=spin)
+    chsh_analysis(alice, bob, cindy, dave, settings=settings, spin=spin)
 
 
-def run_analysis(*results, settings=None, spin=0.5, digits=3):
+def chsh_analysis(*results, settings=None, spin=0.5, digits=3):
     """
     Core of analysis
     :param results: Data for experiment stations (A, B, C, D)
@@ -204,7 +204,58 @@ def run_analysis(*results, settings=None, spin=0.5, digits=3):
     plt.clf()
 
 
-def qm_func(a, spin=1 / 2):
+def eberhard_analysis(orig, coinc, settings=None):
+    """
+    Core of analysis
+    :param results: Data for experiment stations (A, B, C, D)
+    :param settings: settings for CHSH test (a, b, c, d)
+
+    """
+
+    a1, b1, a2, b2 = settings
+
+    p11 = (
+        (coinc['Alice']['setting'] == a1) &
+        (coinc['Bob']['setting'] == b1) &
+        (coinc['Alice']['outcome'] == 1) &
+        (coinc['Bob']['outcome'] == 1)
+    ).mean()
+
+    p12 = (
+        (coinc['Alice']['setting'] == a1) &
+        (coinc['Bob']['setting'] == b2) &
+        (coinc['Alice']['outcome'] == 1) &
+        (coinc['Bob']['outcome'] == 1)
+    ).mean()
+
+    p22 = (
+        (coinc['Alice']['setting'] == a2) &
+        (coinc['Bob']['setting'] == b2) &
+        (coinc['Alice']['outcome'] == 1) &
+        (coinc['Bob']['outcome'] == 1)
+    ).mean()
+
+    p21 = (
+        (coinc['Alice']['setting'] == a2) &
+        (coinc['Bob']['setting'] == b1) &
+        (coinc['Alice']['outcome'] == 1) &
+        (coinc['Bob']['outcome'] == 1)
+    ).mean()
+
+    pa1 = (
+        (orig['Alice']['setting'] == a1) &
+        (orig['Alice']['outcome'] == 1)
+    ).mean()
+
+    pb1 = (
+        (orig['Bob']['setting'] == b1) &
+        (orig['Bob']['outcome'] == 1)
+    ).mean()
+
+    return p11 + p12 + p21 - p22 - pa1 - pb1
+
+
+def qm_func(a, spin=0.5):
     """
     Quantum mechanical Correlation for specific angular difference
     :param a: angle difference in radians
@@ -215,10 +266,12 @@ def qm_func(a, spin=1 / 2):
 
 
 class Analysis(object):
-    def __init__(self, dt=1e-5):
+    def __init__(self):
         a_file, b_file = utils.get_latest('A-*.h5', 'B-*.h5')
         assert all((a_file, b_file)), "Matching Data files were not found in folder."
-        print(f'Running analysis for data: Alice - {a_file}, Bob - {b_file} ...')
+        print('Running analysis for data: ')
+        print(f'\tAlice - {a_file}')
+        print(f'\tBob   - {b_file}')
 
         # Original data, no manipulations
         self.original = {
@@ -247,20 +300,26 @@ class Analysis(object):
             'Alice': self.unique['Alice'][ai],
             'Bob': self.unique['Bob'][bi]
         }
-        self.analyse(coinc_time=dt)
 
-    def analyse(self, coinc_time=1e-15):
-        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < coinc_time
-        analyse(self.data['Alice'][sel], self.data['Bob'][sel])
+    def analyse(self, window=1e-15):
+        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < window
+        coinc = {
+            'Alice': self.data['Alice'][sel],
+            'Bob': self.data['Bob'][sel]
+        }
+        analyse(coinc['Alice'], coinc['Bob'])
+        ch = eberhard_analysis(self.original,  coinc, settings=(0.0, 22.5, 45, 67.5))
+        print(f'CH = {ch: 0.4e}  <= 0')
 
-    def mi_test(self, coinc_time=1e-15):
-        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < coinc_time
+    def mi_test(self, window=1e-15):
+        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < window
         alice = self.data['Alice'][sel]
         bob = self.data['Bob'][sel]
 
         table = PrettyTable()
         table.align = "r"
         table.field_names = ["", "I(x,y)", "Rank", "95% Percentile", "<I>", "σI"]
+        print()
         print("Mutual Information Analysis.")
         table.add_rows([
             mi_signif(alice['setting'], bob['setting'], label=f'a,b'),
@@ -270,14 +329,13 @@ class Analysis(object):
         ])
         print(table)
 
-    def stats(self, coinc_time=1):
-
+    def stats(self, window=1):
         table = PrettyTable()
         table.align = 'r'
         table.field_names = ["Station", "Seen", "Detected", "% Detected", "% Matched", "% Coinc"]
+        print()
         print("Station event counts.")
-
-        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < coinc_time
+        sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < window
         coinc = sel.sum()
 
         for station in ['Alice', 'Bob']:

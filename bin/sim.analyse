@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+import argparse
+
+from eprsim.analysis import Analysis
+
+parser = argparse.ArgumentParser(description='Analyse Simulation Results')
+parser.add_argument("-w", type=float, default=1e-15, help="Coincidence time window")
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    proc = Analysis()
+    proc.analyse(window=args.w)
+    proc.stats(window=args.w)
+    proc.mi_test(window=args.w)
