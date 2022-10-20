@@ -204,7 +204,7 @@ def chsh_analysis(*results, settings=None, spin=0.5, digits=3):
     plt.clf()
 
 
-def eberhard_analysis(orig, coinc, settings=None):
+def ch_analysis(orig, coinc, settings=None):
     """
     Core of analysis
     :param results: Data for experiment stations (A, B, C, D)
@@ -214,45 +214,57 @@ def eberhard_analysis(orig, coinc, settings=None):
 
     a1, b1, a2, b2 = settings
 
-    p11 = (
+    c11 = (
         (coinc['Alice']['setting'] == a1) &
         (coinc['Bob']['setting'] == b1) &
         (coinc['Alice']['outcome'] == 1) &
         (coinc['Bob']['outcome'] == 1)
-    ).mean()
+    ).sum()
 
-    p12 = (
+    c12 = (
         (coinc['Alice']['setting'] == a1) &
         (coinc['Bob']['setting'] == b2) &
         (coinc['Alice']['outcome'] == 1) &
         (coinc['Bob']['outcome'] == 1)
-    ).mean()
+    ).sum()
 
-    p22 = (
+    c22 = (
         (coinc['Alice']['setting'] == a2) &
         (coinc['Bob']['setting'] == b2) &
         (coinc['Alice']['outcome'] == 1) &
         (coinc['Bob']['outcome'] == 1)
-    ).mean()
+    ).sum()
 
-    p21 = (
+    c21 = (
         (coinc['Alice']['setting'] == a2) &
         (coinc['Bob']['setting'] == b1) &
         (coinc['Alice']['outcome'] == 1) &
         (coinc['Bob']['outcome'] == 1)
-    ).mean()
+    ).sum()
 
-    pa1 = (
-        (orig['Alice']['setting'] == a1) &
-        (orig['Alice']['outcome'] == 1)
-    ).mean()
+    sa1 = (
+        (coinc['Alice']['setting'] == a1) &
+        (coinc['Bob']['setting'] == b1) &
+        (coinc['Alice']['outcome'] == 1)
+    ).sum()
 
-    pb1 = (
-        (orig['Bob']['setting'] == b1) &
-        (orig['Bob']['outcome'] == 1)
-    ).mean()
+    sb1 = (
+        (coinc['Alice']['setting'] == a1) &
+        (coinc['Bob']['setting'] == b1) &
+        (coinc['Bob']['outcome'] == 1)
+    ).sum()
 
-    return p11 + p12 + p21 - p22 - pa1 - pb1
+    corr_tbl = PrettyTable()
+    corr_tbl.align = "r"
+    corr_tbl.field_names = ["Parameter", "Counts",]
+    corr_tbl.add_row([f'C(a₁,b₁)', round(c11)])
+    corr_tbl.add_row([f'C(a₁,b₂)', round(c12)])
+    corr_tbl.add_row([f'C(a₂,b₁)', round(c21)])
+    corr_tbl.add_row([f'C(a₂,b₂)', round(c22)])
+    corr_tbl.add_row([f'S(a₁)', round(sa1)])
+    corr_tbl.add_row([f'S(b₁)', round(sb1)])
+    print(corr_tbl)
+    return (c11 + c12 + c21 - c22)/(sa1 + sb1)
 
 
 def qm_func(a, spin=0.5):
@@ -308,8 +320,8 @@ class Analysis(object):
             'Bob': self.data['Bob'][sel]
         }
         analyse(coinc['Alice'], coinc['Bob'])
-        ch = eberhard_analysis(self.original,  coinc, settings=(0.0, 22.5, 45, 67.5))
-        print(f'CH = {ch: 0.4e}  <= 0')
+        ch = ch_analysis(self.original, coinc, settings=(0.0, 22.5, 45, 67.5))
+        print(f'CH = {ch: 0.4e}  <= 1')
 
     def mi_test(self, window=1e-15):
         sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < window

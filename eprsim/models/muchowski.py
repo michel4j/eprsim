@@ -19,7 +19,7 @@ class Source(SourceType):
 
 class Station(StationType):
     def detect(self, setting, particle):
-        phi, lamb  = particle
-        delta = numpy.radians(setting - phi)
+        phi, lamb = particle
+        delta = numpy.radians(setting) - phi
         return self.time(), setting, numpy.sign(numpy.cos(delta)**2 - lamb)
 
