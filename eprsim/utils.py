@@ -1,6 +1,7 @@
 import glob
 import os
 
+
 import numpy
 import scipy
 from scipy import interpolate
@@ -32,10 +33,6 @@ def sample_pdf(func, low=0, high=1, size=None):
 
     dist = scipy.stats.rv_histogram((y * 1e6))
     return dist.rvs(size=size)
-
-
-
-
 
 
 def rand_unit_vec(size=None, theta=None):

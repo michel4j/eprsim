@@ -2,7 +2,6 @@ import functools
 import itertools
 from multiprocessing import Pool, cpu_count
 
-
 import numpy
 import pandas
 import scipy.stats

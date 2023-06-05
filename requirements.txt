@@ -4,4 +4,6 @@ scipy
 tables
 tqdm
 numpy
+pyzmq
 prettytable
+matplotlib
