@@ -31,8 +31,8 @@ class SourceType(ABC):
     """
     Generate and emit two particles with hidden variables
     """
-    RATE = 1e4      # maximum number of particles emitted per second
-    JITTER = 1e7    # Jitter unit in seconds
+    RATE = 1e3      # maximum number of particles emitted per second
+    JITTER = 1e-8    # time jitter
 
     def __init__(self):
         self.context = zmq.Context()
@@ -50,7 +50,7 @@ class SourceType(ABC):
         """
         Return the current emission time. Represents a global clock.
         """
-        return float(self.clock + 1/(1 + rng.poisson(lam=self.JITTER)) + self.index * 1 / self.RATE)
+        return float(self.clock + rng.uniform(0, self.JITTER) + self.index * 1 / self.RATE)
 
     @abstractmethod
     def emit(self):

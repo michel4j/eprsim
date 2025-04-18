@@ -346,9 +346,13 @@ class Analysis(object):
         print("Station event counts.")
         sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < window
         times = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time'])
-        print(f"Councidence times:  Max={times.max():0.3e}, Min={times.min():0.3e}, Mean={times.mean():0.3e}")
+        alice_rate = 1/numpy.diff(self.data['Alice']['time'])
+        bob_rate = 1/numpy.diff(self.data['Bob']['time'])
+        print(f"Coincidence times:  Max={times.max():0.2e}, Min={times.min():0.2e}, Mean={times.mean():0.2e}")
+        print(f"Coincidence window: {window:0.2e}")
+        print(f"Alice particle rate: Mean={alice_rate.mean():0.0f}")
+        print(f"Bob particle rate: Mean={bob_rate.mean():0.0f}")
         coinc = sel.sum()
-
         for station in ['Alice', 'Bob']:
             detected = len(self.original[station])
             matched = len(self.data[station])
