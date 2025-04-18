@@ -31,8 +31,8 @@ class SourceType(ABC):
     """
     Generate and emit two particles with hidden variables
     """
-    RATE = 1e4  # maximum number of particles emitted per second
-    JITTER = 0  # Jitter unit in seconds
+    RATE = 1e4      # maximum number of particles emitted per second
+    JITTER = 1e7    # Jitter unit in seconds
 
     def __init__(self):
         self.context = zmq.Context()
@@ -50,7 +50,7 @@ class SourceType(ABC):
         """
         Return the current emission time. Represents a global clock.
         """
-        return float(self.clock + rng.poisson(1) * self.JITTER + self.index * 1 / self.RATE)
+        return float(self.clock + 1/(1 + rng.poisson(lam=self.JITTER)) + self.index * 1 / self.RATE)
 
     @abstractmethod
     def emit(self):
@@ -74,7 +74,7 @@ class SourceType(ABC):
             alice, bob = self.emit()
             a_msg = [msgpack.dumps(self.time()), msgpack.dumps(alice), msgpack.dumps(self.index)]
             b_msg = [msgpack.dumps(self.time()), msgpack.dumps(bob), msgpack.dumps(self.index)]
-            # set buffer size after first message
+            # set buffer size after first, message
             if self.index == 0:
                 size = sys.getsizeof(a_msg) * BUFFER_SIZE
                 self.alice.setsockopt(zmq.SNDBUF, size)
@@ -158,18 +158,17 @@ class StationType(ABC):
 
             progress = tqdm(total=float("inf"))
             while self.running:
-                for i in range(chunk_size):
-
+                chunk_count = 0
+                while chunk_count < chunk_size:
                     # read particle from source
                     socks = dict(self.poller.poll(1))
                     while self.running and self.socket not in socks:
                         socks = dict(self.poller.poll(1))
 
                     if not self.running:
-                        df = pandas.DataFrame.from_records(buffer[:i])
+                        df = pandas.DataFrame.from_records(buffer[:chunk_count])
                         store.append('data', df, format='table', index=False)
                         break
-
                     elif self.socket in socks:
                         src_data = self.socket.recv_multipart()
                         clock_data, particle_data, index_data = src_data
@@ -177,20 +176,21 @@ class StationType(ABC):
                         self.index = msgpack.loads(index_data)
                         self.clock = msgpack.loads(clock_data)
 
-                        # set packet size after first message
+                        # set packet size after first, message
                         if count == 0:
                             size = sys.getsizeof(src_data) * BUFFER_SIZE
                             self.socket.setsockopt(zmq.RCVBUF, size)
 
                         setting = random.choice(settings)
                         results = self.detect(setting, particle)  # detect particle
-                        time.sleep(1 / self.RATE)
 
                         # Record data in chunks to HDF5 file
-                        buffer[i] = results + (self.index,)
-                        count += 1
-                        progress.update(1)
-
+                        if results:
+                            time.sleep(1 / self.RATE)
+                            buffer[chunk_count] = results + (self.index,)
+                            count += 1
+                            chunk_count += 1
+                            progress.update(1)
                 else:
                     df = pandas.DataFrame.from_records(buffer)
                     store.append('data', df, format='table', index=False)

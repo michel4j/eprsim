@@ -32,7 +32,7 @@ def mutinf(xa, ya):
             sel_y = (ya == y)
             pxy = (sel_x & sel_y).mean()
             if pxy != 0.0:
-                ixy += pxy * numpy.log10(pxy / (px * sel_y.mean()))
+                ixy += pxy * numpy.log2(pxy / (px * sel_y.mean()))
     return ixy
 
 
@@ -63,8 +63,8 @@ def rand_mi_pdf(x_vals, y_vals, x_probs, y_probs, size, i):
 
 def fmt_ang(angle):
     """
-    Humanize test angles
-    :param angle: angle in degrees
+    Humanize the test angles
+    :param angle: test angle in degrees
     :return: String representation of angle in radians
     """
     return {
@@ -136,7 +136,7 @@ def chsh_analysis(*results, settings=None, spin=0.5, digits=3):
     :param c: Data for experiment station C
     :param d: Data for experiment station D
     :param spin: spin of particles, default 1/2
-    :param digits: deciman places for correlation output
+    :param digits: decimal places for correlation output
     """
 
     data = [
@@ -178,7 +178,11 @@ def chsh_analysis(*results, settings=None, spin=0.5, digits=3):
     print("EPRB-Simulation Analysis")
     print("-" * 80)
     print(
-        f"a₁ = {fmt_ang(data[0][2])}, a₂ = {fmt_ang(data[2][2])}, b₁ = {fmt_ang(data[1][2])}, b₂ = {fmt_ang(data[3][2])}")
+        f"a₁ = {fmt_ang(data[0][2])}, "
+        f"a₂ = {fmt_ang(data[2][2])}, "
+        f"b₁ = {fmt_ang(data[1][2])}, "
+        f"b₂ = {fmt_ang(data[3][2])}"
+    )
     print(corr_tbl)
     chsh_sim = abs(eab_sim[0] - eab_sim[1] + eab_sim[2] + eab_sim[3])
     chsh_qm = abs(eab_qm[0] - eab_qm[1] + eab_qm[2] + eab_qm[3])
@@ -290,18 +294,12 @@ class Analysis(object):
             'Bob': pandas.read_hdf(b_file)
         }
 
-        # remove nan outcome values, ie particles seen by station but not detected
-        self.detected = {
-            name: data.dropna(subset='outcome')
-            for name, data in self.original.items()
-        }
-
-        # keep only first event in a time batch, corresponds to pulsed measurements
-        # with pre-agreed time slots. does nothing if time precision is smaller than
-        # emission/detection period. Also convert to numpy record array at this point
+        # Keep only the first event in a time batch, corresponds to pulsed measurements
+        # with pre-agreed time slots. Does nothing if time precision is smaller than
+        # an emission/detection period. Also convert to a numpy record array at this point
         self.unique = {
             name: data.drop_duplicates(subset='time', keep='first').to_records(index=False)
-            for name, data in self.detected.items()
+            for name, data in self.original.items()
         }
 
         # match data pairs and create final matched data for further analysis
@@ -343,38 +341,34 @@ class Analysis(object):
     def stats(self, window=1):
         table = PrettyTable()
         table.align = 'r'
-        table.field_names = ["Station", "Seen", "Detected", "% Detected", "% Matched", "% Coinc"]
+        table.field_names = ["Station", "Detected", "% Matched", "% Coinc"]
         print()
         print("Station event counts.")
         sel = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time']) < window
+        times = numpy.abs(self.data['Alice']['time'] - self.data['Bob']['time'])
+        print(f"Councidence times:  Max={times.max():0.3e}, Min={times.min():0.3e}, Mean={times.mean():0.3e}")
         coinc = sel.sum()
 
         for station in ['Alice', 'Bob']:
-            seen = len(self.original[station])
-            detected = len(self.detected[station])
+            detected = len(self.original[station])
             matched = len(self.data[station])
             table.add_row([
                 f'{station} - All',
-                seen,
                 detected,
-                f'{detected / seen:0.1%}',
                 f'{matched / detected:0.1%}',
-                f'{coinc / matched:0.1%}'
+                f'{coinc / detected:0.1%}'
             ])
 
         for station in ['Alice', 'Bob']:
             for setting in numpy.unique(self.original[station]['setting']):
-                seen = (self.original[station]['setting'] == setting).sum()
-                detected = (self.detected[station]['setting'] == setting).sum()
+                detected = (self.original[station]['setting'] == setting).sum()
                 matched = (self.data[station]['setting'] == setting).sum()
                 coinc = (self.data[station][sel]['setting'] == setting).sum()
 
                 table.add_row([
                     f'{station} - {setting}',
-                    seen,
                     detected,
-                    f'{detected / seen:0.1%}',
                     f'{matched / detected:0.1%}',
-                    f'{coinc / matched:0.1%}'
+                    f'{coinc / detected:0.1%}'
                 ])
         print(table)

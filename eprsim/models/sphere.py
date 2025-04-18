@@ -23,5 +23,3 @@ class Station(StationType):
         c = ((-1) ** (2*s)) * numpy.dot(h, a)
         if p <= abs(c):
             return self.time(), setting, numpy.sign(c)
-        else:
-            return self.time(), setting, numpy.nan

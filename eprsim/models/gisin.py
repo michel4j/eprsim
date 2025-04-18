@@ -26,5 +26,4 @@ class Station(StationType):
         c = ((-1) ** (2*s)) * numpy.dot(h, a)
         if p > 0 or numpy.random.uniform() <= abs(c):
             return self.time(), setting, numpy.sign(c)
-        else:
-            return self.time(), setting, numpy.nan
+

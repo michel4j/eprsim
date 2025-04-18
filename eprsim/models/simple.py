@@ -28,5 +28,4 @@ class Station(StationType):
         c = (-1 ** n) * numpy.cos((a - e)/s)
         if p <= abs(c):
             return self.time(), setting, numpy.sign(c)
-        else:
-            return self.time(), setting, numpy.nan
+

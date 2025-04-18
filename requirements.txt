@@ -1,9 +1,11 @@
+pyzmq
 wheel
 pandas
 scipy
 tables
 tqdm
 numpy
-pyzmq
+msgpack
 prettytable
 matplotlib
+pygobject
